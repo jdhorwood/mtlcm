@@ -176,16 +176,18 @@ class MultiTaskModel(nn.Module):
                 scheduler.step(tracked_loss)
 
             self.eval()
-            if ((epoch == 0) or ((epoch + 1 % 100 == 0) and track_mcc)) and run_eval:
+            if ((epoch + 1 % 50 == 0) and track_mcc) and run_eval:
                 fig, strong_mcc, weak_mcc = self.eval_mcc(
                     cca_dim, dataset.obs_data, dataset.x_data.detach().cpu().numpy()
                 )
 
-            # Print the epoch loss
+            # Print the epoch loss and weak MCC
             if (epoch + 1) % 50 == 0:
                 print(
                     "Multitask Epoch: {} Loss: {:.4f}".format(epoch + 1, tracked_loss)
                 )
+                if run_eval and track_mcc:
+                    print("Weak MCC: {:.4f}".format(weak_mcc))
 
     def eval_mcc(self, cca_dim, observations, targets, sample_size=10000):
         # Sample points from the dataset

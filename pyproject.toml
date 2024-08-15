@@ -11,10 +11,11 @@ python = "~3.9"
 typer = "0.9.0"
 datamol = "0.10.3"
 fsspec = "2023.6.0"
-torch = "~1.10"
 pandas = "2.0.2"
 numpy = "1.24.3"
 dgl = "1.1.0"
+seaborn = "^0.13.2"
+torch = "^2.4.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5"

@@ -1,20 +1,23 @@
-from loguru import logger
 import pandas as pd
 import torch
-from tqdm import tqdm
+import wandb
 from torch import nn
 import numpy as np
-from torch.utils.data import DataLoader, TensorDataset
-from mtlcm.utils.data.lin_transform import cal_mcc
-from mtlcm.utils.data.generics import freeze, unfreeze
+from torch.utils.data import TensorDataset, DataLoader
+from models.set_models import DeepSet
+from utils.data.lin_transform import cal_mcc
+from utils.data.generics import freeze, unfreeze
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
+from tqdm import tqdm
+from sklearn.preprocessing import StandardScaler
 
 class TaskLinearModel(nn.Module):
     def __init__(
         self,
         observation_dim,
         latent_dim,
+        num_tasks,
+        amortized=False,
         sigma_s=0.1,
         log=False,
         device=None,
@@ -26,11 +29,15 @@ class TaskLinearModel(nn.Module):
         Args:
             observation_dim: Dimension of the observed features.
             latent_dim: Dimension of the latent features.
+            amortized: If True, uses a neural network to predict the causal index in an amortized fashion. While in theory one
+            might then be able to use this to enable some for of causal identification at test time, in practice this is not recommended
+            as convergence is much better when using free parameters for the causal index.
             sigma_s: Standard deviation of the spurious noise. If None, this is learned as an additional parameter (not recommended).
         """
 
         super(TaskLinearModel, self).__init__()
         self.log = log
+        self.num_tasks = num_tasks
         self.A = nn.Linear(latent_dim, observation_dim, bias=False)
         self.sigma_obs = torch.tensor(
             sigma_obs
@@ -41,27 +48,21 @@ class TaskLinearModel(nn.Module):
             self.sigma_s = torch.tensor(sigma_s)
         self.observation_dim = observation_dim
         self.latent_dim = latent_dim
+        self.amortized = amortized
+
+        if amortized:
+            self.c_index_model = DeepSet(
+                dim_input=observation_dim + 1,
+                num_outputs=1,
+                dim_output=latent_dim,
+                dim_hidden=128,
+            )
         self.device = (
             torch.device("cuda" if torch.cuda.is_available() else "cpu")
             if device is None
             else device
         )
-
-    def get_latents(self, x, batch_size=1024, to_numpy=True):
-        dataset = TensorDataset(x)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        z = []
-        self.eval()
-        with torch.no_grad():
-            for data in dataloader:
-                z_batch = data[0].to(self.device) @ self.A.weight.data.inverse().T
-                z.append(z_batch)
-            z = torch.cat(z, dim=0).detach()
-
-        if to_numpy:
-            z = z.cpu().numpy()
-
-        return z
+        self.to(self.device)
 
     def likelihood_loss(
         self,
@@ -95,7 +96,9 @@ class TaskLinearModel(nn.Module):
         if causal_index is not None and causal_index.ndim == 2:
             causal_index = torch.as_tensor(causal_index).unsqueeze(1).float()
 
-        if not use_ground_truth:
+        if not use_ground_truth and self.amortized:
+            c_indx = torch.sigmoid(self.c_index_model(inputs, targets))
+        elif not use_ground_truth:
             c_indx = torch.sigmoid(c_ind_params)
         elif causal_index is not None and true_gammas is not None:
             c_indx = causal_index
@@ -109,15 +112,7 @@ class TaskLinearModel(nn.Module):
             transformation=self.A,
             gamma=(gamma if not use_ground_truth else true_gammas.unsqueeze(-1)),
         )
-        try:
-            log_prob = self._likelihood(Mu, Sigma, inputs)
-        except ValueError:
-            # Add small amount of noise to the diagonal to ensure that the covariance matrix is positive definite
-            logger.warning(
-                "Covariance matrix was not positive definite. Adding epsilon of 1e-6 to the diagonal."
-            )
-            Sigma = Sigma + 1e-6 * torch.eye(Sigma.shape[-1]).to(self.device)
-            log_prob = self._likelihood(Mu, Sigma, inputs)
+        log_prob = self._likelihood(Mu, Sigma, inputs)
 
         if debug and transformation is not None:
             with torch.no_grad():
@@ -151,6 +146,7 @@ class TaskLinearModel(nn.Module):
     def _get_distribution_params(
         self, causal_index, inputs, targets, transformation, gamma
     ):
+
         """
         Computes the parameters of the marginal likelihood distribution of the inputs given the targets and task variables.
         """
@@ -160,9 +156,7 @@ class TaskLinearModel(nn.Module):
         else:  # For the ground truth matrix
             A = transformation
 
-        D = torch.diag_embed(
-            self.sigma_s**2 * (1 - causal_index) + causal_index
-        ).squeeze(1)
+        D = torch.diag_embed(self.sigma_s**2 * (1 - causal_index) + causal_index).squeeze(1)
         z_mean = targets.unsqueeze(-1) * (gamma * (1 - causal_index.transpose(-1, -2)))
         Mu = (A @ z_mean).squeeze(-1)
         Sigma = (A @ D @ A.T) + (
@@ -179,13 +173,13 @@ class TaskLinearModel(nn.Module):
         debug=False,
         batch_size=32,
         optimizer=None,
-        eval_interval=50,
+        eval_interval=None,
         fixed_gamma=None,
         warmup_epochs=0,
         use_scheduler=False,
         dtype=torch.float32,
-        run_eval=True,
     ):
+
         """
         Given observed inputs and outputs, train the linear transformation matrix A to recover the ground truth transformation
         matrix of the latent space.
@@ -208,105 +202,105 @@ class TaskLinearModel(nn.Module):
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
         self.c_params = self._init_free_params(
-            size=(dataset.num_tasks, self.observation_dim), fixed_value=None
-        )
+            size=(self.num_tasks, self.observation_dim), fixed_value=None
+        ).to(device=self.device, dtype=dtype)
         self.gamma_params = self._init_free_params(
-            size=(dataset.num_tasks, self.observation_dim),
+            size=(self.num_tasks, self.observation_dim),
             fixed_value=fixed_gamma,
             warmup=(warmup_epochs > 0),
-        )
+        ).to(device=self.device, dtype=dtype)
 
         if optimizer is None:
-            lr = 0.1 if use_scheduler else 5e-3
+            lr = 0.001 if use_scheduler else 5e-3
             self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         else:
             self.optimizer = optimizer(
                 self.parameters()
             )  # set any extra parameters as a partial function object (functools)
 
-        self.to(self.device)
-
         if use_scheduler:
             scheduler = ReduceLROnPlateau(
                 self.optimizer,
                 "min",
-                patience=100,
-                factor=0.5,
+                patience=5,
+                factor=0.1,
                 verbose=True,
-                min_lr=5e-3,
+                min_lr=1e-5,
                 threshold=1e-4,
             )
 
+        wandb.watch(self)
         train_results = []
-        with tqdm(range(num_epochs)) as T:
-            for epoch in T:
-                if 0 < warmup_epochs == epoch:
-                    unfreeze(self.gamma_params)
-                elif warmup_epochs > 0 and epoch < warmup_epochs:
-                    freeze(self.gamma_params)
+        for epoch in range(num_epochs):
+            if 0 < warmup_epochs == epoch:
+                unfreeze(self.gamma_params)
+            elif warmup_epochs > 0 and epoch < warmup_epochs:
+                freeze(self.gamma_params)
 
-                # Eval progress every eval_interval epochs
-                if (epoch % eval_interval) == 0 and run_eval:
-                    results = self.eval_A(
-                        observations=dataset.o_supportx.to(self.device),
-                        latents=dataset.latents.to(self.device)
-                        if dataset.latents is not None
-                        else None,
-                        transformation=dataset.transformation.to(self.device)
-                        if dataset.transformation is not None
-                        else None,
-                        epoch=epoch,
-                        causal_index=dataset.causal_index.to(self.device)
-                        if dataset.causal_index is not None
-                        else None,
-                        true_gammas=dataset.gamma_coeffs.to(self.device)
-                        if dataset.gamma_coeffs is not None
-                        else None,
-                        approx_gammas=self.gamma_params,
-                        use_ground_truth=use_ground_truth,
-                    )
-                    results["linear_model_epoch"] = epoch
-                    train_results.append(results)
+            # Eval progress every eval_interval epochs
+            # if eval_interval is not None and (epoch % eval_interval) == 0:
+            #     results = self.eval_A(
+            #         observations=dataset.o_supportx,
+            #         latents=dataset.latents,
+            #         transformation=dataset.transformation,
+            #         epoch=epoch,
+            #         causal_index=dataset.causal_index,
+            #         true_gammas=dataset.gamma_coeffs,
+            #         approx_gammas=self.gamma_params,
+            #         use_ground_truth=use_ground_truth,
+            #     )
+            #     results['epoch'] = epoch
+            #     train_results.append(results)
 
-                tracked_loss = self._train_epoch(
-                    debug=debug,
-                    transformation=dataset.transformation.to(self.device)
-                    if dataset.transformation is not None
-                    else None,
-                    use_ground_truth=use_ground_truth,
-                    dataloader=dataloader,
-                )
-
-                if use_scheduler:
-                    scheduler.step(tracked_loss)
-                
-                T.set_postfix(train_loss=tracked_loss)
-
-        # Eval at end of training
-        if run_eval:
-            final_results = self.eval_A(
-                observations=dataset.o_supportx.to(self.device),
-                latents=dataset.latents.to(self.device)
-                if dataset.latents is not None
-                else None,
-                transformation=dataset.transformation.to(self.device)
-                if dataset.transformation is not None
-                else None,
-                epoch=(num_epochs - 1),
-                causal_index=dataset.causal_index.to(self.device)
-                if dataset.causal_index is not None
-                else None,
-                true_gammas=dataset.gamma_coeffs.to(self.device)
-                if dataset.gamma_coeffs is not None
-                else None,
-                approx_gammas=self.gamma_params,
+            tracked_loss = self._train_epoch(
+                debug=debug,
+                transformation=None,
                 use_ground_truth=use_ground_truth,
+                dataloader=dataloader
             )
-            final_results["linear_model_epoch"] = num_epochs - 1
-            train_results.append(final_results)
+            print(tracked_loss)
+            wandb.log({"linear-loss": tracked_loss})
+            # print(torch.sigmoid(self.c_params) > 0.5)
 
-        results_df = pd.DataFrame.from_records(train_results)
-        return results_df
+            if use_scheduler:
+                scheduler.step(tracked_loss)
+
+        # if eval_interval is not None:
+        #     # Eval at end of training
+        #     final_results = self.eval_A(
+        #         observations=dataset.o_supportx,
+        #         latents=dataset.latents,
+        #         transformation=dataset.transformation,
+        #         epoch=(num_epochs - 1),
+        #         causal_index=dataset.causal_index,
+        #         true_gammas=dataset.gamma_coeffs,
+        #         approx_gammas=self.gamma_params,
+        #         use_ground_truth=use_ground_truth,
+        #     )
+        #     final_results['epoch'] = num_epochs - 1
+        #     train_results.append(final_results)
+
+        #     results_df = pd.DataFrame.from_records(train_results)
+        # else:
+        #     results_df = None
+        results_df = None
+        return wandb.run.name, wandb.run.id, results_df
+    
+    def get_features(self, dataset, run_id=None, batch_size=1024):
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+        z = []
+        self.eval()
+        with torch.no_grad():
+            for batch in dataloader:
+                z_batch = batch[0].to(self.device) @ self.A.weight.data.inverse().T
+                z.append(z_batch)
+            z = torch.cat(z, dim=0).detach().cpu().numpy()
+
+        if run_id is not None:
+            np.save("./experiments/qm9/latents/z{}_{}.npy".format(run_id, self.latent_dim), z)
+
+        return z
 
     @staticmethod
     def _init_free_params(size, fixed_value=None, warmup=False):
@@ -328,50 +322,58 @@ class TaskLinearModel(nn.Module):
         use_ground_truth,
         dataloader,
     ):
+
         """
         Traverses through the batches and performs the training for one full epoch.
         """
         self.train()
         epochs_losses = []
-        
-        for _, data_batch in enumerate(dataloader):
-            if len(data_batch) == 5:
-                inputs, targets, causal_index, true_gammas, task_idx_batch = (
-                    data_batch
-                )
-            else:
+        with tqdm(dataloader) as T:
+            for batch_idx, data_batch in enumerate(T):
+
                 inputs, targets, task_idx_batch = data_batch
-                causal_index = None
-                true_gammas = None
+                # batch_size = inputs.shape[0]
 
-            gamma = self.gamma_params[task_idx_batch].unsqueeze(-1)
-            c_s = self.c_params[task_idx_batch].unsqueeze(1)
+                # inputs = inputs.unsqueeze(1).expand(-1, self.num_tasks, -1).reshape(batch_size*self.num_tasks, self.observation_dim)
+                # targets = targets.unsqueeze(-1).reshape(batch_size*self.num_tasks, 1)
+                # gamma = self.gamma_params.unsqueeze(0).expand(batch_size, -1, -1).reshape(batch_size*self.num_tasks, self.observation_dim).unsqueeze(-1)
+                # c_s = self.c_params.unsqueeze(0).expand(batch_size, -1, -1).reshape(batch_size*self.num_tasks, self.observation_dim).unsqueeze(1)
+                gamma = self.gamma_params[task_idx_batch].unsqueeze(-1)
+                c_s = self.c_params[task_idx_batch].unsqueeze(1)
 
-            # Put on device
-            inputs = inputs.to(self.device)
-            targets = targets.to(self.device)
+                self.optimizer.zero_grad()
+                res = self.likelihood_loss(
+                    inputs.to(self.device),
+                    targets.to(self.device),
+                    causal_index=None,
+                    transformation=transformation,
+                    use_ground_truth=use_ground_truth,
+                    debug=debug,
+                    c_ind_params=c_s,
+                    gamma=gamma,
+                    true_gammas=None,
+                )
+                if len(res) == 4:
+                    loss, Mu, Sigma, c_indx = res
+                else:
+                    loss, Mu, Sigma, gt_loss, c_indx = res
+                loss = loss.mean()
+                epochs_losses.append(loss.item())
+                loss.backward()
 
-            self.optimizer.zero_grad()
-            res = self.likelihood_loss(
-                inputs,
-                targets,
-                causal_index=causal_index,
-                transformation=transformation,
-                use_ground_truth=use_ground_truth,
-                debug=debug,
-                c_ind_params=c_s,
-                gamma=gamma,
-                true_gammas=true_gammas,
-            )
-            if len(res) == 4:
-                loss, Mu, Sigma, c_indx = res
-            else:
-                loss, Mu, Sigma, gt_loss, c_indx = res
-            loss = loss.mean()
-            epochs_losses.append(loss.item())
-            loss.backward()
+                # if len(res) == 5:
+                #     wandb.log({"linear-loss": loss.item(), "linear-gt_loss": gt_loss.mean().item()})
+                # else:
+                #     wandb.log({"linear-loss": loss.item()})
 
-            self.optimizer.step()
+                self.optimizer.step()
+                # wandb.log(
+                #     {"sigma_s": self.sigma_s.item(), "sigma_obs": self.sigma_obs.item()}
+                # )  # Log noise variables
+
+                # Update progress bar
+                if batch_idx % 50 == 0:
+                    T.set_postfix(dict(loss=float(loss.item())))
 
         return np.mean(epochs_losses)
 
@@ -442,6 +444,45 @@ class TaskLinearModel(nn.Module):
 
                         if self.log:
                             print(f"Mean MCC: {np.mean(mccs_transforms)}")
+                        wandb.log(
+                            {"MCC_transform": np.mean(mccs_transforms), "epoch": epoch}
+                        )
+                        wandb.log(
+                            {"MCC_true_latents": np.mean(mccs_latents), "epoch": epoch}
+                        )
+                        wandb.log(
+                            {
+                                "MCC_true_latents_transform": np.mean(
+                                    mccs_latents_transforms
+                                ),
+                                "epoch": epoch,
+                            }
+                        )
+
+                        if (
+                            not use_ground_truth
+                            and latents is not None
+                            and causal_index is not None
+                        ):
+                            self._check_causal_index_recovery(
+                                assignments_latents, causal_index, epoch
+                            )
+                        if true_gammas is not None and approx_gammas is not None:
+                            if use_ground_truth:
+                                # MSE should be zero
+                                self._check_gamma_convergence(
+                                    assignments_latents_transforms,
+                                    true_gammas=true_gammas,
+                                    approx_gammas=true_gammas,
+                                    epoch=epoch,
+                                )
+                            else:
+                                self._check_gamma_convergence(
+                                    assignments_latents,
+                                    true_gammas=true_gammas,
+                                    approx_gammas=approx_gammas,
+                                    epoch=epoch,
+                                )
 
                     self._console_log(assignments_latents, causal_index, transformation)
         else:
@@ -455,6 +496,56 @@ class TaskLinearModel(nn.Module):
             "mcc_transforms_mean": np.mean(mccs_transforms),
         }
         return results_dict
+
+    def _check_gamma_convergence(
+        self, assignments_latents, true_gammas, approx_gammas, epoch
+    ):
+        """
+        Check the convergence of the gamma parameters. First determines the permutation of the latent variables according
+        to the linear sum assignment and inverts the permutation to recover the original latent ordering. Then assess the MSE
+        between the true and approximated gamma parameters after the inverted permutation.
+
+        Args:
+            assignment_latents: List of tuples mapping the latent index (first tuple) to the observed index (second tuple).
+            true_gammas: True values for the gamma parameters.
+            approx_gammas: Approximated values for the gamma parameters.
+            epoch: Current epoch.
+
+        Returns:
+            None (logs to wandb)
+
+        """
+        permutation_index = torch.tensor(np.array(assignments_latents))[:, 1]
+        permuted_approx_gammas = self._permute_tensor_columns(
+            approx_gammas, permutation_index
+        )
+        with torch.no_grad():
+            gamma_mse = torch.mean((permuted_approx_gammas - true_gammas) ** 2)
+            wandb.log({"gamma_mse": gamma_mse.item(), "epoch": epoch})
+
+    def _check_causal_index_recovery(self, assignments_latents, causal_index, epoch):
+        """
+        Check the accuracy of the causal index recovery. First determines the permutation of the latent variables according
+        to the linear sum assignment and inverts the permutation to recover the original latent ordering. Then, the causal
+        index is recovered by indexing into the causal index parameters with the recovered latent ordering.
+
+        Args:
+            assignments_latents: List of tuples mapping the latent index (first tuple) to the observed index (second tuple).
+            causal_ind_batches: Ground truth values for the causal index.
+            epoch: Current epoch.
+
+        Returns:
+
+        """
+
+        permutation_index = torch.tensor(np.array(assignments_latents))[:, 1]
+        permuted_c_index = self._permute_tensor_columns(
+            torch.sigmoid(self.c_params), permutation_index
+        )
+        c_index_accuracy = (
+            ((permuted_c_index > 0.5) == causal_index).all(dim=1).float().mean()
+        )
+        wandb.log({"c_index_accuracy": c_index_accuracy.item(), "epoch": epoch})
 
     def _permute_tensor_columns(self, inputs, permutation_index):
         """
@@ -483,3 +574,65 @@ class TaskLinearModel(nn.Module):
             print(
                 f" Linear assignment of true latents to approx latents: {assignments_latents[rand_elem_ix]}"
             )
+
+
+if __name__ == "__main__":
+    import argparse
+
+    # Process command line arguments for num_epochs, num_tasks, num_causal, observation_dim, fixed_gamma, warmup
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_epochs", type=int, default=40)
+    parser.add_argument("--observation_dim", type=int, default=5)
+    parser.add_argument("--run_id", type=int, default=1)
+    parser.add_argument("--fixed_gamma", type=float, default=None)
+    parser.add_argument("--warmup", type=int, default=0)
+    parser.add_argument("--batch_size", type=int, default=256)
+
+    args = parser.parse_args()
+    num_epochs = args.num_epochs
+    observation_dim = args.observation_dim
+    fixed_gamma = args.fixed_gamma
+    warmup = args.warmup
+    run_id = args.run_id
+    batch_size = args.batch_size
+
+    x = np.load("./experiments/qm9/latents/h{}_{}.npy".format(run_id, observation_dim))
+    y = np.genfromtxt("./experiments/qm9/data/y_all.csv", delimiter=",")
+    num_tasks = y.shape[-1]
+
+    x = StandardScaler().fit_transform(x)
+    y = StandardScaler().fit_transform(y)
+    x = torch.from_numpy(x).float()
+    y = torch.from_numpy(y).float()
+    dataset = TensorDataset(x)
+
+    task_id = torch.tensor([i for i in range(num_tasks) for _ in range(x.shape[0])]).long()
+    x_task = torch.cat([x for _ in range(num_tasks)], dim=0)
+    y_task = torch.cat([y[:, i] for i in range(num_tasks)], dim=0).unsqueeze(-1)
+    dataset_task = TensorDataset(x_task, y_task, task_id)
+
+    wandb.init(project="causal-ml", name="task-linear-model", group="qm9")
+    model = TaskLinearModel(
+        observation_dim=observation_dim,
+        latent_dim=observation_dim,
+        num_tasks=num_tasks,
+        amortized=False,
+        device="cpu",
+        sigma_s=None,
+        sigma_obs=0.01,
+    )
+
+    model.train_A(
+        dataset=dataset_task,
+        num_epochs=num_epochs,
+        debug=True,
+        use_ground_truth=False,
+        batch_size=batch_size, 
+        optimizer=None,  # partial(torch.optim.LBFGS, max_iter=500),
+        eval_interval=None,
+        fixed_gamma=fixed_gamma,
+        warmup_epochs=warmup,
+        use_scheduler=True,
+    )
+
+    model.get_features(dataset, run_id, batch_size=1024)

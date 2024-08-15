@@ -1,0 +1,12 @@
+output_path: "exp_outputs/qm9/full_config_latent10"
+latent_dim: 10
+hidden_dim: 64
+device: cuda
+use_wandb: True
+batch_size: 256
+seed: 3
+num_linear_epochs: 10
+num_multitask_epochs: 300
+use_gnn: True
+subset_size: null
+exp_name: "-qm9-full_config_latent10"

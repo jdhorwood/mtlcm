@@ -61,7 +61,7 @@ def generate_training_data(
     if transformation is None:
         transformation = generate_linear_transform(dimension=observation_dim)
 
-    x_support, y_support, x_query, y_query, causal_indicators, gamma_coeffs = gen_data(
+    x_support, y_support, x_query, y_query, causal_indicators, gamma_coeffs, _ = gen_data(
         num_tasks=num_tasks,
         num_support_points=num_support_points,
         num_query_points=128,

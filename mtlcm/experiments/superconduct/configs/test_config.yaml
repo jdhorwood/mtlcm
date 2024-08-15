@@ -1,0 +1,11 @@
+output_path: "exp_outputs/superconduct/test_config"
+observation_dim: 87
+latent_dim: 10
+hidden_dim: 64
+device: cpu
+use_wandb: True
+batch_size: 256
+seed: 1
+num_linear_epochs: 1
+num_multitask_epochs: 20
+exp_name: "-test_config"

@@ -1,0 +1,17 @@
+output_path: "exp_outputs/linear_identifiability/full_config_with_scaling"
+latent_dim: 10
+num_causal: 2
+sigma_obs: 0.01
+sigma_s: 0.1
+matrix_types:
+  - identity
+  - orthogonal
+  - random
+num_seeds: 5
+num_epochs: 6000
+num_tasks: 200
+num_points_per_task: 100
+batch_size: 256
+device: cpu
+standardize_features: True
+n_jobs: 15
