@@ -146,12 +146,11 @@ class QM9Experiment:
         self.linear_model = TaskLinearModel(
             observation_dim=self.latent_dim,
             latent_dim=self.latent_dim,
-            amortized=False,
             device=self.device,
             sigma_obs=self.sigma_obs,
         )
 
-        _, _, results_df = self.linear_model.train_A(
+        results_df = self.linear_model.train_A(
             dataset=dataset,
             num_epochs=self.num_linear_epochs,
             debug=True,

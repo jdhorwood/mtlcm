@@ -24,6 +24,7 @@ class SyntheticMultiTaskExperiment:
         num_samples_per_task,
         num_causal,
         hidden_dim,
+        num_hidden_layers: int = 2,
         last_dim=None,
         device=None,
         seed=0,
@@ -49,6 +50,7 @@ class SyntheticMultiTaskExperiment:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
         self.num_causal = num_causal
+        self.num_hidden_layers = num_hidden_layers
         self.num_linear_epochs = num_linear_epochs
         self.num_multitask_epochs = num_multitask_epochs
         self.batch_size = batch_size
@@ -154,6 +156,7 @@ class SyntheticMultiTaskExperiment:
             true_decoder=self.true_decoder,
             hidden_dim=self.hidden_dim,
             last_dim=self.last_dim,
+            num_hidden_layers=self.num_hidden_layers,
             device=self.device,
         )
 

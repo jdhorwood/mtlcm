@@ -59,7 +59,7 @@ class MultiTaskModel(nn.Module):
         self.latent_dim = latent_dim
         self.true_decoder = true_decoder
         self.use_gnn = use_gnn
-
+    
         self.feature_encoder = create_feature_encoder(
             hidden_dim,
             last_dim,

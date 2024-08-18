@@ -16,3 +16,7 @@ This package provides the implementations for the results in the paper:
     ```bash
     poetry install
     ```
+4. If using cuda, install the cuda version of dgl via pip manually by running (replace cuxxx with your cuda version)
+    ```
+    poetry remove dgl; pip install  dgl -f https://data.dgl.ai/wheels/torch-2.3/cu121/repo.html
+    ```

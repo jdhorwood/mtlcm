@@ -2,7 +2,6 @@ output_path: "exp_outputs/qm9/full_config_latent5"
 latent_dim: 5
 hidden_dim: 64
 device: cuda
-use_wandb: True
 batch_size: 256
 seed: 1
 num_linear_epochs: 10

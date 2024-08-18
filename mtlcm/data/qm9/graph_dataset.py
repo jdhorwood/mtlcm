@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from datamol.utils import fs
 from loguru import logger
-from utils.data.generics import standardize_data
+from mtlcm.utils.data.generics import standardize_data
 
 class GraphDataset:
     """

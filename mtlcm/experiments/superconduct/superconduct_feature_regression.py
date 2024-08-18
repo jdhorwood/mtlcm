@@ -125,7 +125,6 @@ class SuperconductFeatureRegressionExperiment:
         self.linear_model = TaskLinearModel(
             observation_dim=self.latent_dim,
             latent_dim=self.latent_dim,
-            amortized=False,
             device=self.device,
             sigma_obs=self.sigma_obs,
         )
