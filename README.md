@@ -46,14 +46,14 @@ python mtlcm/run.py linear_synthetic mtlcm/experiments/linear_identifiability/co
 python mtlcm/run.py multitask_synthetic mtlcm/experiments/synthetic_multitask/configs/exp_config.yaml
 ```
 
-### QM9 Data
+### QM9 data
 
 ```python
 python mtlcm/run.py qm9 mtlcm/experiments/qm9/configs/latent_7/config_0.yaml
 ```
 
 ### Superconductivity data
-For the superconductivity, you first need to download the files train.csv and unique_m.csv from [this link](https://archive.ics.uci.edu/dataset/464/superconductivty+data) into the mtlcm/data/superconduct/diredtory.
+For the superconductivity, you first need to download the files train.csv and unique_m.csv from [this link](https://archive.ics.uci.edu/dataset/464/superconductivty+data) into the `mtlcm/data/superconduct/` diredtory.
 
 Then run
 
