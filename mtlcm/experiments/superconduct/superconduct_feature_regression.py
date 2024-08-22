@@ -74,7 +74,7 @@ class SuperconductFeatureRegressionExperiment:
             ]  # the first column is the number of elements, which is trivial and skipped
 
         except FileNotFoundError:
-            print(f"FileNotFoundError: Please download the superconductivity dataset from https://archive.ics.uci.edu/dataset/464/superconductivty+data and unzip them to {DATA_PATH}")
+            print(f"FileNotFoundError: Please download the superconductivity dataset from https://archive.ics.uci.edu/dataset/464/superconductivty+data and unzip the two csv files to {DATA_PATH}.")
             sys.exit(1)
 
 
