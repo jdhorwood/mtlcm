@@ -164,13 +164,16 @@ class MultiTaskModel(nn.Module):
                 min_lr=5e-3,
                 threshold=1e-4,
             )
+        
+        with tqdm(range(num_epochs)) as T:
+            for _ in T:
+                self.train()
+                tracked_loss = self._train_epoch(dataloader)
 
-        for _ in tqdm(range(num_epochs)):
-            self.train()
-            tracked_loss = self._train_epoch(dataloader)
+                T.set_postfix(train_loss=tracked_loss)
 
-            if use_scheduler:
-                scheduler.step(tracked_loss)
+                if use_scheduler:
+                    scheduler.step(tracked_loss)
 
     def eval_mcc(self, cca_dim, observations, targets, sample_size=10000):
         # Sample points from the dataset

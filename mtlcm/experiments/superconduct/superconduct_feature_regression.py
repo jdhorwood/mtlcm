@@ -28,7 +28,7 @@ class SuperconductFeatureRegressionExperiment:
         batch_size=256,
         exp_name=None,
         standardize_features=True,
-        lr=1e-3,
+        lr=0.005,
         feature_regression=False,
     ):
 
@@ -151,7 +151,7 @@ class SuperconductFeatureRegressionExperiment:
             dataset=dataset,
             num_epochs=self.num_linear_epochs,
             batch_size=self.batch_size,
-            eval_interval=200,
+            eval_interval=1,
             use_scheduler=True,
             run_eval=False,
         )
