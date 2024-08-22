@@ -2,3 +2,4 @@ __pycache__
 exp_outputs/
 mtlcm/data/superconduct/*.csv
 *.pyc
+mtlcm/data/superconduct/*.csv

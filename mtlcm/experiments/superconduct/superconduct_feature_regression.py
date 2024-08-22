@@ -1,4 +1,5 @@
 import os
+import sys
 import fsspec
 import torch
 import numpy as np
@@ -60,16 +61,22 @@ class SuperconductFeatureRegressionExperiment:
         """
         seed_everything(seed)
 
-        x = np.genfromtxt(
-            os.path.join(DATA_PATH, "unique_m.csv"), skip_header=1, delimiter=","
-        )[
-            :, :-1
-        ]  # the last column is string, which we skip
-        y = np.genfromtxt(
-            os.path.join(DATA_PATH, "train.csv"), skip_header=1, delimiter=","
-        )[
-            :, 1:
-        ]  # the first column is the number of elements, which is trivial and skipped
+        try:
+            x = np.genfromtxt(
+                os.path.join(DATA_PATH, "unique_m.csv"), skip_header=1, delimiter=","
+            )[
+                :, :-1
+            ]  # the last column is string, which we skip
+            y = np.genfromtxt(
+                os.path.join(DATA_PATH, "train.csv"), skip_header=1, delimiter=","
+            )[
+                :, 1:
+            ]  # the first column is the number of elements, which is trivial and skipped
+
+        except FileNotFoundError:
+            print(f"FileNotFoundError: Please download the superconductivity dataset from https://archive.ics.uci.edu/dataset/464/superconductivty+data and unzip them to {DATA_PATH}")
+            sys.exit(1)
+
 
         # Standardize the features
         if self.standardize_features:
