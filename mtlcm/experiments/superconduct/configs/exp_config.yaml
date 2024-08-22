@@ -3,9 +3,9 @@ observation_dim: 87
 latent_dim: 10
 hidden_dim: 64
 num_hidden_layers: 2
-device: cpu
+device: cuda
 batch_size: 256
 seed: 1
 num_linear_epochs: 20
 num_multitask_epochs: 200
-exp_name: "-test_config"
+exp_name: "-exp_config"
