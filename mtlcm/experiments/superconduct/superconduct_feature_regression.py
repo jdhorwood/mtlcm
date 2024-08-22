@@ -3,14 +3,14 @@ import sys
 import fsspec
 import torch
 import numpy as np
+from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from loguru import logger
 from torch.utils.data import TensorDataset
 from mtlcm.models import MultiTaskModel, TaskLinearModel
 from mtlcm.utils.data.generics import seed_everything
 
-DATA_PATH = "mtlcm/data/superconduct/"
-
+DATA_PATH = Path(__file__).parent.parent.parent / "data/superconduct"
 
 class SuperconductFeatureRegressionExperiment:
     def __init__(
@@ -112,9 +112,7 @@ class SuperconductFeatureRegressionExperiment:
 
         # Train the identifiable linear model
         logger.info("Training the identifiable linear model")
-        observations, _ = self.multitask_model.get_latents(multi_dataset)
-        observations = self._standardize_data(observations)[0]
-
+        observations, _ = self._standardize_data(*self.multitask_model.get_latents(multi_dataset))
         with fsspec.open(
             f"{self.output_path}/data/multitask_model_latents.pt", "wb"
         ) as f:
