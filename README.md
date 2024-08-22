@@ -58,7 +58,7 @@ For the superconductivity, you first need to download the files train.csv and un
 Then run
 
 ```python
-python mtlcm/run.py superconduct mtlcm/experiments/superconduct/configs/test_config.yaml
+python mtlcm/run.py superconduct mtlcm/experiments/superconduct/configs/exp_config.yaml
 ```
 
 ## Results
