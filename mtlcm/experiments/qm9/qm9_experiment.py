@@ -67,27 +67,13 @@ class QM9Experiment:
         seed_everything(seed)
 
         # Load the data
-        if self.use_gnn:
-            dataset = GraphDataset(
-                subset_size=self.subset_size, standardize=True, load_path=self.load_path
-            )
-            self.y = dataset.y
-            self.observation_dim = dataset.num_features
-            self.num_tasks = dataset.num_tasks
-        else:
-            x = np.genfromtxt(os.path.join(DATA_PATH, "e_all.csv"), delimiter=",")
-            y = np.genfromtxt(os.path.join(DATA_PATH, "y_all.csv"), delimiter=",")
-            self.observation_dim = x.shape[-1]
-            self.num_tasks = y.shape[-1]
-
-            # Standardize the features
-            if self.standardize_features:
-                x, y = standardize_data(x, y, device=self.device)
-
-            dataset = TensorDataset(x, y)
-            self.x = x
-            self.y = y
-
+        dataset = GraphDataset(
+            subset_size=self.subset_size, standardize=True, load_path=self.load_path
+        )
+        self.y = dataset.y
+        self.observation_dim = dataset.num_features
+        self.num_tasks = dataset.num_tasks
+            
         return dataset
 
     def run(self):
