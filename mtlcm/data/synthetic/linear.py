@@ -71,12 +71,10 @@ class LinearDataset(Dataset):
     def __getitem__(self, idx):
 
         task_idx = self._get_task_from_index(idx)
-        causal_idx = self.causal_index[task_idx]
-        gamma_coeffs = self.gamma_coeffs[task_idx]
         x_data = self.x_data[idx]
         y_data = self.y_data[idx]
 
-        return x_data, y_data, causal_idx, gamma_coeffs, task_idx
+        return x_data, y_data, task_idx
 
     def __len__(self):
         """

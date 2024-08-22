@@ -7,7 +7,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from dgl.dataloading.dataloader import GraphDataLoader
 
-from mtlcm.utils.data.lin_transform import cal_weak_strong_mcc, plot_cca_mcc_vals
+from mtlcm.utils.data.lin_transform import cal_weak_strong_mcc
 
 
 def create_feature_encoder(
@@ -82,7 +82,7 @@ class MultiTaskModel(nn.Module):
 
     def get_representation_from_ground_truth(self, x):
         """
-        Returns the representation obtained from the passing the observations through the model's encoder.
+        Returns the representation obtained from passing the observations through the model's encoder.
         These are expected to be linear transformations of the original latent variables.
 
         Args:
@@ -99,7 +99,7 @@ class MultiTaskModel(nn.Module):
 
     def get_latents(self, dataset, batch_size=1024, to_numpy=True, dataloader_cls=None):
         """
-        Returns the latent variables obtained from the encoder of the model.
+        Returns the latent variables obtained from the encoder of the model over a full dataset.
         Args:
             x: (torch.Tensor) Observations.
             batch_size: (int) Batch size for the dataloader.
@@ -133,11 +133,8 @@ class MultiTaskModel(nn.Module):
         num_epochs,
         batch_size=32,
         optimizer=None,
-        cca_dim=None,
         use_scheduler=False,
-        track_mcc=False,
         lr=1e-3,
-        run_eval=True,
         use_gnn=False,
     ):
         dataloader = (
@@ -168,27 +165,13 @@ class MultiTaskModel(nn.Module):
                 threshold=1e-4,
             )
 
-        for epoch in tqdm(range(num_epochs)):
+        for _ in tqdm(range(num_epochs)):
             self.train()
             tracked_loss = self._train_epoch(dataloader)
 
             if use_scheduler:
                 scheduler.step(tracked_loss)
-
-            self.eval()
-            if ((epoch + 1 % 50 == 0) and track_mcc) and run_eval:
-                fig, strong_mcc, weak_mcc = self.eval_mcc(
-                    cca_dim, dataset.obs_data, dataset.x_data.detach().cpu().numpy()
-                )
-
-            # Print the epoch loss and weak MCC
-            if (epoch + 1) % 50 == 0:
-                print(
-                    "Multitask Epoch: {} Loss: {:.4f}".format(epoch + 1, tracked_loss)
-                )
-                if run_eval and track_mcc:
-                    print("Weak MCC: {:.4f}".format(weak_mcc))
-
+            
     def eval_mcc(self, cca_dim, observations, targets, sample_size=10000):
         # Sample points from the dataset
         sample_size = min(sample_size, observations.shape[0])
@@ -201,9 +184,8 @@ class MultiTaskModel(nn.Module):
             r = self.feature_encoder(observations)
             r = r.view(-1, r.shape[-1]).detach().cpu().numpy()
             weak_mcc, strong_mcc = cal_weak_strong_mcc(r, targets, cca_dim=cca_dim)
-            fig = plot_cca_mcc_vals(r, targets)
 
-        return fig, strong_mcc, weak_mcc
+        return strong_mcc, weak_mcc
 
     def _train_epoch(
         self,
@@ -242,78 +224,3 @@ class MultiTaskModel(nn.Module):
 
         epoch_loss = np.mean(epochs_losses)
         return epoch_loss
-
-
-# if __name__ == "__main__":
-#     import argparse
-#     from data.synthetic.non_linear import NonLinearDataset
-
-#     # Process command line arguments for num_epochs, num_tasks, num_causal, observation_dim, fixed_gamma, warmup
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("--num_epochs", type=int, default=8000)
-#     parser.add_argument("--num_tasks", type=int, default=500)
-#     parser.add_argument("--num_data_per_task", type=int, default=200)
-#     parser.add_argument("--num_causal", type=int, default=2)
-#     parser.add_argument("--observation_dim", type=int, default=20)
-#     parser.add_argument("--latent_dim", type=int, default=10)
-#     parser.add_argument("--fixed_gamma", type=float, default=None)
-#     parser.add_argument("--warmup", type=int, default=0)
-#     parser.add_argument("--sample_batches", type=bool, default=True)
-#     parser.add_argument("--sample_weights", type=bool, default=True)
-#     parser.add_argument("--hidden_dim", type=int, default=64)
-#     parser.add_argument("--last_dim", type=int, default=10)
-#     parser.add_argument("--batch_size", type=int, default=256)
-#     parser.add_argument("--device", type=str, default="cpu")
-
-#     args = parser.parse_args()
-#     num_epochs = args.num_epochs
-#     num_tasks = args.num_tasks
-#     num_causal = args.num_causal
-#     observation_dim = args.observation_dim
-#     latent_dim = args.latent_dim
-#     fixed_gamma = args.fixed_gamma
-#     warmup = args.warmup
-#     sample_batches = args.sample_batches
-#     hidden_dim = args.hidden_dim
-#     last_dim = args.last_dim
-#     batch_size = args.batch_size
-#     sample_weights = args.sample_weights
-#     num_data_per_task = args.num_data_per_task
-#     device = args.device
-
-#     true_decoder = nn.Sequential(
-#         nn.Linear(latent_dim, observation_dim),
-#         nn.ReLU(),
-#         nn.Linear(observation_dim, observation_dim),
-#     )
-
-#     dataset = NonLinearDataset(
-#         decoder=true_decoder,
-#         num_tasks=num_tasks,
-#         num_causal=num_causal,
-#         observation_dim=observation_dim,
-#         latent_dim=latent_dim,
-#         num_support_points=num_data_per_task,
-#         standardize_features=True,
-#         sigma_s=0.1,
-#         device=device,
-#     )
-
-#     model = MultiTaskModel(
-#         observation_dim=observation_dim,
-#         latent_dim=latent_dim,
-#         num_tasks=num_tasks,
-#         true_decoder=true_decoder,
-#         hidden_dim=hidden_dim,
-#         last_dim=last_dim,
-#         device=device,
-#     )
-
-#     model.train_predictor(
-#         dataset=dataset,
-#         num_epochs=num_epochs,
-#         batch_size=batch_size,
-#         optimizer=None,
-#         cca_dim=latent_dim,
-#         use_scheduler=True,
-#     )

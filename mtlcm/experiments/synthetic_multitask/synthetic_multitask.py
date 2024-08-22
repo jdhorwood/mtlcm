@@ -24,13 +24,13 @@ class SyntheticMultiTaskExperiment:
         num_samples_per_task,
         num_causal,
         hidden_dim,
-        num_hidden_layers: int = 2,
+        num_hidden_layers: int = 1,
         last_dim=None,
         device=None,
         seed=0,
         sigma_obs=1e-4,
-        num_linear_epochs=8000,
-        num_multitask_epochs=5000,
+        num_linear_epochs=1000,
+        num_multitask_epochs=2000,
         batch_size=256,
         exp_name=None,
         standardize_features=True,
@@ -97,21 +97,23 @@ class SyntheticMultiTaskExperiment:
         # Train the multitask model
         logger.info("Training the multitask model")
         multi_dataset = self.setup(seed=self.seed)
-        strong_mcc, weak_mcc = self._train_multitask(dataset=multi_dataset)
+        _, weak_mcc = self._train_multitask(dataset=multi_dataset)
 
-        # Train the identifiable linear model
-        logger.info("Training the identifiable linear model")
         observations = self.multitask_model.get_representation_from_ground_truth(
             x=multi_dataset.x_data.to(self.device),
         )
         with fsspec.open(f"{self.output_path}/data/observations.pt", "wb") as f:
             torch.save(observations, f)
+            
+        # Train the identifiable linear model
+        logger.info("Training the identifiable linear model")
         linear_dataset = LinearDataset.from_data(o_supportx=observations, o_supporty=multi_dataset.y_data, num_tasks=self.num_tasks,
                                                  num_support_points=self.num_samples_per_task, device=self.device, causal_index=multi_dataset.causal_index,
                                                  gamma_coeffs=multi_dataset.gamma_coeffs, latents=multi_dataset.x_data)
 
         results = self._train_linear_model(dataset=linear_dataset)
-        results["strong_mcc_after_training"] = strong_mcc
+        
+        # These are the results from the multitask (weakly identifiable) model
         results["weak_mcc_after_training"] = weak_mcc
 
         # Save results
@@ -164,12 +166,10 @@ class SyntheticMultiTaskExperiment:
             dataset=dataset,
             num_epochs=self.num_multitask_epochs,
             batch_size=self.batch_size,
-            cca_dim=self.latent_dim,
             use_scheduler=False,
-            track_mcc=False,
         )
 
-        fig, strong_mcc, weak_mcc = self.multitask_model.eval_mcc(
+        strong_mcc, weak_mcc = self.multitask_model.eval_mcc(
             observations=dataset.obs_data, targets=dataset.x_data.detach().cpu().numpy(), cca_dim=self.latent_dim)
         
         return strong_mcc, weak_mcc

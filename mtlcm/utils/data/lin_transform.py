@@ -173,32 +173,6 @@ def generate_synthetic_transform_data(
     return gamma_coeffs, causal_index, latents, o_supportx, o_supporty, transformation
 
 
-def plot_cca_mcc_vals(z1, z2):
-    """
-    Generate a scatter plot of the MCC values after applying CCA for different dimensions.
-
-    Args:
-        z1: Array 1
-        z2: Array 2
-
-    Returns:
-        figure for the scatter plot.
-    """
-
-    plt.figure(figsize=(10, 10))
-    for cca_dim in range(2, min(z2.shape[-1], z1.shape[-1]) + 1):
-        weak, strong = cal_weak_strong_mcc(z1, z2, cca_dim=cca_dim)
-        plt.scatter(cca_dim, weak, c="blue")
-
-    # Add labels
-    plt.xlabel("CCA dimension")
-    plt.ylabel("MCC")
-    plt.title("MCC score after CCA for different dimension choices")
-    figure = plt.gcf()
-    plt.close()
-    return figure
-
-
 def cal_weak_strong_mcc(z1, z2, cca_dim=None):
     if cca_dim is None:
         cca_dim = z1.shape[-1]

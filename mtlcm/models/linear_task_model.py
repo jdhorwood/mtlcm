@@ -16,7 +16,6 @@ class TaskLinearModel(nn.Module):
         observation_dim,
         latent_dim,
         sigma_s=0.1,
-        log=False,
         device=None,
         sigma_obs=0.01,
     ):
@@ -30,7 +29,6 @@ class TaskLinearModel(nn.Module):
         """
 
         super(TaskLinearModel, self).__init__()
-        self.log = log
         self.A = nn.Linear(latent_dim, observation_dim, bias=False)
         self.sigma_obs = torch.tensor(
             sigma_obs
@@ -67,47 +65,30 @@ class TaskLinearModel(nn.Module):
         self,
         inputs,
         targets,
-        transformation,
         gamma,
-        causal_index=None,
-        use_ground_truth=False,
-        debug=False,
-        c_ind_params=None,
-        true_gammas=None,
+        c_ind_params,
     ):
         """
         Compute the MLE objective for the linear model.
 
         Args:
-            transformation: Transformation matrix to be used for the likelihood computation.
             inputs: Input observations. Shape is (num tasks x num samples x num observed features)
             targets: Target observations. Shape is (num tasks x num samples x 1)
-            causal_index: Index of the causal feature. Shape is (num tasks x num latent features)
             c_ind_params: Parameters for the causal indices. Shape is (num tasks x 1 x num latent features)
-            debug: If True, returns the ground truth likelihood as well.
-            use_ground_truth: If True, uses the ground truth causal index for the likelihood computation.
             gamma: Spurious variable correlation parameter. Shape is (num_tasks x num latent features x 1)
 
         Returns:
             torch.float: negative log-likelihood value
         """
-
-        if causal_index is not None and causal_index.ndim == 2:
-            causal_index = torch.as_tensor(causal_index).unsqueeze(1).float()
-
-        if not use_ground_truth:
-            c_indx = torch.sigmoid(c_ind_params)
-        elif causal_index is not None and true_gammas is not None:
-            c_indx = causal_index
-        else:
-            raise ValueError("No causal index provided but debug was set to True.")
+        
+        c_indx = torch.sigmoid(c_ind_params)
 
         Mu, Sigma = self._get_distribution_params(
             causal_index=c_indx,
             inputs=inputs,
             targets=targets,
             transformation=self.A,
-            gamma=(gamma if not use_ground_truth else true_gammas.unsqueeze(-1)),
+            gamma=gamma,
         )
         try:
             log_prob = self._likelihood(Mu, Sigma, inputs)
@@ -118,24 +99,6 @@ class TaskLinearModel(nn.Module):
             )
             Sigma = Sigma + 1e-6 * torch.eye(Sigma.shape[-1]).to(self.device)
             log_prob = self._likelihood(Mu, Sigma, inputs)
-
-        if debug and transformation is not None:
-            with torch.no_grad():
-                true_gammas = (
-                    torch.ones_like(gamma)
-                    if true_gammas is None
-                    else true_gammas.unsqueeze(-1)
-                )
-                gt_mu, gt_sigma = self._get_distribution_params(
-                    causal_index=causal_index,
-                    inputs=inputs,
-                    targets=targets,
-                    transformation=transformation,
-                    gamma=true_gammas,
-                )
-                gt_log_prob = self._likelihood(gt_mu, gt_sigma, inputs)
-
-            return -log_prob, Mu, Sigma, -gt_log_prob, c_indx
 
         return -log_prob, Mu, Sigma, c_indx
 
@@ -175,15 +138,11 @@ class TaskLinearModel(nn.Module):
         self,
         dataset,
         num_epochs,
-        use_ground_truth=False,
-        debug=False,
         batch_size=32,
         optimizer=None,
         eval_interval=50,
-        fixed_gamma=None,
         warmup_epochs=0,
         use_scheduler=False,
-        dtype=torch.float32,
         run_eval=True,
     ):
         """
@@ -194,11 +153,7 @@ class TaskLinearModel(nn.Module):
             dataset: LinearDataset object.
             num_epochs: Number of epochs to train for.
             latents: Latent variables representating the underlying factors of variation. Shape is (num tasks x num samples x num latent features).
-            use_ground_truth: Flag for using the ground truth causal indices for each task.
-            debug: Flag for debugging. If true, will log the loss and the ground truth loss with the true transformation matrix.
-            causal_index: Causal indices for each task. Shape is (num tasks x num latent features). Required if debug is true.
             batch_size: Batch size of tasks for training.
-            transformation: Ground truth transformation matrix. Shape is (num latent features x num observed features). Required if debug is true.
             warmup_epochs: Number of epochs at start of training during which the parameters for gamma are frozen. After this point, everything is trained jointly.
 
         Returns:
@@ -208,12 +163,10 @@ class TaskLinearModel(nn.Module):
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
         self.c_params = self._init_free_params(
-            size=(dataset.num_tasks, self.observation_dim), fixed_value=None
+            size=(dataset.num_tasks, self.observation_dim)
         )
         self.gamma_params = self._init_free_params(
             size=(dataset.num_tasks, self.observation_dim),
-            fixed_value=fixed_gamma,
-            warmup=(warmup_epochs > 0),
         )
 
         if optimizer is None:
@@ -255,25 +208,11 @@ class TaskLinearModel(nn.Module):
                         transformation=dataset.transformation.to(self.device)
                         if dataset.transformation is not None
                         else None,
-                        epoch=epoch,
-                        causal_index=dataset.causal_index.to(self.device)
-                        if dataset.causal_index is not None
-                        else None,
-                        true_gammas=dataset.gamma_coeffs.to(self.device)
-                        if dataset.gamma_coeffs is not None
-                        else None,
-                        approx_gammas=self.gamma_params,
-                        use_ground_truth=use_ground_truth,
                     )
                     results["linear_model_epoch"] = epoch
                     train_results.append(results)
 
                 tracked_loss = self._train_epoch(
-                    debug=debug,
-                    transformation=dataset.transformation.to(self.device)
-                    if dataset.transformation is not None
-                    else None,
-                    use_ground_truth=use_ground_truth,
                     dataloader=dataloader,
                 )
 
@@ -292,15 +231,6 @@ class TaskLinearModel(nn.Module):
                 transformation=dataset.transformation.to(self.device)
                 if dataset.transformation is not None
                 else None,
-                epoch=(num_epochs - 1),
-                causal_index=dataset.causal_index.to(self.device)
-                if dataset.causal_index is not None
-                else None,
-                true_gammas=dataset.gamma_coeffs.to(self.device)
-                if dataset.gamma_coeffs is not None
-                else None,
-                approx_gammas=self.gamma_params,
-                use_ground_truth=use_ground_truth,
             )
             final_results["linear_model_epoch"] = num_epochs - 1
             train_results.append(final_results)
@@ -309,23 +239,12 @@ class TaskLinearModel(nn.Module):
         return results_df
 
     @staticmethod
-    def _init_free_params(size, fixed_value=None, warmup=False):
-        if fixed_value is not None:
-            if not warmup:
-                free_params = fixed_value * torch.ones(size)
-            else:  # In this case, the values are fixed initially but will be unfrozen later
-                free_params = torch.nn.Parameter(
-                    fixed_value * torch.ones(size, dtype=torch.float32)
-                )
-        else:
-            free_params = torch.nn.Parameter(torch.randn(size, dtype=torch.float32))
+    def _init_free_params(size):
+        free_params = torch.nn.Parameter(torch.randn(size, dtype=torch.float32))
         return free_params
 
     def _train_epoch(
         self,
-        debug,
-        transformation,
-        use_ground_truth,
         dataloader,
     ):
         """
@@ -335,15 +254,8 @@ class TaskLinearModel(nn.Module):
         epochs_losses = []
         
         for _, data_batch in enumerate(dataloader):
-            if len(data_batch) == 5:
-                inputs, targets, causal_index, true_gammas, task_idx_batch = (
-                    data_batch
-                )
-            else:
-                inputs, targets, task_idx_batch = data_batch
-                causal_index = None
-                true_gammas = None
-
+            
+            inputs, targets, task_idx_batch = data_batch
             gamma = self.gamma_params[task_idx_batch].unsqueeze(-1)
             c_s = self.c_params[task_idx_batch].unsqueeze(1)
 
@@ -352,21 +264,14 @@ class TaskLinearModel(nn.Module):
             targets = targets.to(self.device)
 
             self.optimizer.zero_grad()
-            res = self.likelihood_loss(
+            loss, _, _, _ = self.likelihood_loss(
                 inputs,
                 targets,
-                causal_index=causal_index,
-                transformation=transformation,
-                use_ground_truth=use_ground_truth,
-                debug=debug,
                 c_ind_params=c_s,
                 gamma=gamma,
-                true_gammas=true_gammas,
             )
-            if len(res) == 4:
-                loss, Mu, Sigma, c_indx = res
-            else:
-                loss, Mu, Sigma, gt_loss, c_indx = res
+            
+            
             loss = loss.mean()
             epochs_losses.append(loss.item())
             loss.backward()
@@ -378,13 +283,8 @@ class TaskLinearModel(nn.Module):
     def eval_A(
         self,
         observations,
-        epoch,
         latents=None,
         transformation=None,
-        causal_index=None,
-        true_gammas=None,
-        approx_gammas=None,
-        use_ground_truth=False,
     ):
         """
         Evaluate the current A matrix via the MCC score with respect to both the ground truth transformation
@@ -440,10 +340,6 @@ class TaskLinearModel(nn.Module):
                                 mccs_latents_transforms.append(mcc_latents_transforms)
                                 assignments_latents_transforms.append(assignments_gt)
 
-                        if self.log:
-                            print(f"Mean MCC: {np.mean(mccs_transforms)}")
-
-                    self._console_log(assignments_latents, causal_index, transformation)
         else:
             raise ValueError(
                 "At least one of latents and transformation must be provided."
@@ -456,30 +352,3 @@ class TaskLinearModel(nn.Module):
         }
         return results_dict
 
-    def _permute_tensor_columns(self, inputs, permutation_index):
-        """
-        Permute the columns of a tensor row by row according to the permutation index.
-
-        Args:
-            inputs: Input data, shape is (num_tasks, permutation dimension).
-            permutation_index: Permutation index, shape is (num_tasks, permutation dimension).
-
-        Returns:
-
-        """
-        permuted_inputs = torch.stack(
-            [inputs[i, permutation_index[i]] for i in range(len(inputs))]
-        )
-        return permuted_inputs
-
-    def _console_log(self, assignments_latents, causal_index, transformation):
-        if self.log:
-            print(f"A_approx: {self.A.weight.data}")
-            print(f"A_true: {transformation}")
-            rand_elem_ix = np.random.randint(0, len(self.c_params))
-            print(f"c_index_approx: {torch.sigmoid(self.c_params[rand_elem_ix])}")
-            print(f"c_index_gt: {causal_index[rand_elem_ix]}")
-
-            print(
-                f" Linear assignment of true latents to approx latents: {assignments_latents[rand_elem_ix]}"
-            )

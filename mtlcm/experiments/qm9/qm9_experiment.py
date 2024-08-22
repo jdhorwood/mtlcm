@@ -178,6 +178,7 @@ class QM9Experiment:
             hidden_dim=self.hidden_dim,
             device=self.device,
             use_gnn=self.use_gnn,
+            num_hidden_layers=2,
         )
 
         self.multitask_model.train_predictor(

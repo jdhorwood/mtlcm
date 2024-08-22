@@ -6,10 +6,10 @@ sigma_s: 0.1
 matrix_types:
   - orthogonal
 num_seeds: 1
-num_epochs: 300
+num_epochs: 3
 num_tasks: 50
 num_points_per_task: 40
 batch_size: 64
-device: cpu
+device: cuda
 standardize_features: False
 n_jobs: 1

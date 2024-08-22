@@ -140,66 +140,6 @@ def gen_data(
     )
 
 
-def gen_env_data(
-    num_envs,
-    num_points,
-    num_features,
-    num_causal,
-    target_noise="standard_normal",
-    env_sigmas=None,
-    sample_weights=True,
-    sample_gammas=False,
-    flip_test_env=False,
-    standardize_features=False,
-):
-    env_data = []
-    # TODO: add tests for the env data
-    causal_indicator, gamma_coeffs, sample_weights, _, _ = _gen_invariant_params(
-        fix_causal_ids=False,
-        num_causal=num_causal,
-        num_features=num_features,
-        num_tasks=1,
-        sample_gammas=sample_gammas,
-        sample_weights=sample_weights,
-    )
-
-    if env_sigmas is None:
-        if flip_test_env:
-            env_sigmas = [0.1, 10]
-        else:
-            env_sigmas = [
-                0.2,
-                0.1,
-                0.05,
-                2,
-                5,
-            ]  # np.random.uniform(0.1, 5, size=num_envs)
-
-    for ix, sigma in enumerate(env_sigmas):
-        # Generate env data
-        x_e, y_e, flip_spurious_e, _ = _gen_data_split(
-            num_tasks=1,
-            causal_indicator=causal_indicator,
-            deterministic_causal=False,
-            num_features=num_features,
-            num_data_points=num_points,
-            sigma_range=[sigma, sigma],
-            flip_spurious=flip_test_env,
-            fixed_sigma=sigma,
-            target_noise=target_noise,
-            spurious_noise=1,
-            causal_noise=None,
-            gamma_coeffs=gamma_coeffs,
-            sample_weights=sample_weights,
-            standardize_features=standardize_features,
-        )
-        x_e = torch.from_numpy(x_e).float()
-        y_e = torch.from_numpy(y_e).float()
-        env_data.append((x_e, y_e, flip_spurious_e))
-
-    return env_data, causal_indicator, gamma_coeffs, sample_weights
-
-
 def _gen_invariant_params(
     fix_causal_ids,
     num_causal,
