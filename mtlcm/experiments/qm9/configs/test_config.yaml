@@ -3,7 +3,7 @@ latent_dim: 10
 hidden_dim: 64
 device: cpu
 batch_size: 64
-seed: 1
+seed: 0
 num_linear_epochs: 1
 num_multitask_epochs: 5
 use_gnn: True

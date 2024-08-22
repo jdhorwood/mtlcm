@@ -49,7 +49,7 @@ python mtlcm/run.py multitask_synthetic mtlcm/experiments/synthetic_multitask/co
 ### QM9 Data
 
 ```python
-python mtlcm/run.py qm9 mtlcm/experiments/qm9/configs/test_config.yaml
+python mtlcm/run.py qm9 mtlcm/experiments/qm9/configs/latent_7/config_0.yaml
 ```
 
 ### Superconductivity data
@@ -57,4 +57,13 @@ python mtlcm/run.py qm9 mtlcm/experiments/qm9/configs/test_config.yaml
 ```python
 python mtlcm/run.py superconduct mtlcm/experiments/superconduct/configs/test_config.yaml
 ```
+
+## Results
+
+Results for synthetic data experiments will be immediately available in the exp_outputs/ directory. For real-world data, the above command should be run multiple times for different seeds (e.g. latent_7/config_[1,2,3,4].yaml in the above example for qm9). The results can then be computed by comparing the representations across seeds by running 
+
+```python
+python mtlcm/results.py "exp_outputs/qm9/full_config_latent7"
+```
+
 
