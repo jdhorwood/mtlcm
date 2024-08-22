@@ -3,18 +3,27 @@ import typer
 import fsspec
 import yaml
 import time
-from mtlcm.experiments.synthetic_multitask.synthetic_multitask import SyntheticMultiTaskExperiment
-from mtlcm.experiments.linear_identifiability.linear_transform_synthethic import LinearTransformExperiment
-from mtlcm.experiments.superconduct.superconduct_feature_regression import SuperconductFeatureRegressionExperiment
+from mtlcm.experiments.synthetic_multitask.synthetic_multitask import (
+    SyntheticMultiTaskExperiment,
+)
+from mtlcm.experiments.linear_identifiability.linear_transform_synthethic import (
+    LinearTransformExperiment,
+)
+from mtlcm.experiments.superconduct.superconduct_feature_regression import (
+    SuperconductFeatureRegressionExperiment,
+)
 from mtlcm.experiments.qm9.qm9_experiment import QM9Experiment
 
 
-EXP_CLASSES = {"multitask_synthetic": SyntheticMultiTaskExperiment, 
-               "linear_synthetic": LinearTransformExperiment,
-               "superconduct": SuperconductFeatureRegressionExperiment,
-               "qm9": QM9Experiment}
+EXP_CLASSES = {
+    "multitask_synthetic": SyntheticMultiTaskExperiment,
+    "linear_synthetic": LinearTransformExperiment,
+    "superconduct": SuperconductFeatureRegressionExperiment,
+    "qm9": QM9Experiment,
+}
 
 app = typer.Typer()
+
 
 @app.command()
 def experiment(exp_class: str, config: str):

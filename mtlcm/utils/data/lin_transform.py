@@ -61,20 +61,22 @@ def generate_training_data(
     if transformation is None:
         transformation = generate_linear_transform(dimension=observation_dim)
 
-    x_support, y_support, x_query, y_query, causal_indicators, gamma_coeffs, _ = gen_data(
-        num_tasks=num_tasks,
-        num_support_points=num_support_points,
-        num_query_points=128,
-        num_features=observation_dim,
-        sigma_range_support=[2, 3],
-        num_causal=num_causal,
-        target_noise="sigmas",
-        flip_spurious=False,
-        # device=device,
-        spurious_noise=spurious_noise,
-        causal_noise=1,
-        sample_gammas=sample_gammas,
-        standardize_features=standardize_features,
+    x_support, y_support, x_query, y_query, causal_indicators, gamma_coeffs, _ = (
+        gen_data(
+            num_tasks=num_tasks,
+            num_support_points=num_support_points,
+            num_query_points=128,
+            num_features=observation_dim,
+            sigma_range_support=[2, 3],
+            num_causal=num_causal,
+            target_noise="sigmas",
+            flip_spurious=False,
+            # device=device,
+            spurious_noise=spurious_noise,
+            causal_noise=1,
+            sample_gammas=sample_gammas,
+            standardize_features=standardize_features,
+        )
     )
 
     o_support, o_query, transformation = gen_observed_data_from_x(

@@ -3,7 +3,6 @@ observation_dim: 87
 latent_dim: 10
 hidden_dim: 64
 device: cpu
-use_wandb: True
 batch_size: 256
 seed: 1
 num_linear_epochs: 1

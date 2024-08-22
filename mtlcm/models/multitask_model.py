@@ -59,7 +59,7 @@ class MultiTaskModel(nn.Module):
         self.latent_dim = latent_dim
         self.true_decoder = true_decoder
         self.use_gnn = use_gnn
-    
+
         self.feature_encoder = create_feature_encoder(
             hidden_dim,
             last_dim,
@@ -171,7 +171,7 @@ class MultiTaskModel(nn.Module):
 
             if use_scheduler:
                 scheduler.step(tracked_loss)
-            
+
     def eval_mcc(self, cca_dim, observations, targets, sample_size=10000):
         # Sample points from the dataset
         sample_size = min(sample_size, observations.shape[0])

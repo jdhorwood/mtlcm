@@ -80,7 +80,7 @@ class TaskLinearModel(nn.Module):
         Returns:
             torch.float: negative log-likelihood value
         """
-        
+
         c_indx = torch.sigmoid(c_ind_params)
 
         Mu, Sigma = self._get_distribution_params(
@@ -202,12 +202,16 @@ class TaskLinearModel(nn.Module):
                 if (epoch % eval_interval) == 0 and run_eval:
                     results = self.eval_A(
                         observations=dataset.o_supportx.to(self.device),
-                        latents=dataset.latents.to(self.device)
-                        if dataset.latents is not None
-                        else None,
-                        transformation=dataset.transformation.to(self.device)
-                        if dataset.transformation is not None
-                        else None,
+                        latents=(
+                            dataset.latents.to(self.device)
+                            if dataset.latents is not None
+                            else None
+                        ),
+                        transformation=(
+                            dataset.transformation.to(self.device)
+                            if dataset.transformation is not None
+                            else None
+                        ),
                     )
                     results["linear_model_epoch"] = epoch
                     train_results.append(results)
@@ -218,19 +222,23 @@ class TaskLinearModel(nn.Module):
 
                 if use_scheduler:
                     scheduler.step(tracked_loss)
-                
+
                 T.set_postfix(train_loss=tracked_loss)
 
         # Eval at end of training
         if run_eval:
             final_results = self.eval_A(
                 observations=dataset.o_supportx.to(self.device),
-                latents=dataset.latents.to(self.device)
-                if dataset.latents is not None
-                else None,
-                transformation=dataset.transformation.to(self.device)
-                if dataset.transformation is not None
-                else None,
+                latents=(
+                    dataset.latents.to(self.device)
+                    if dataset.latents is not None
+                    else None
+                ),
+                transformation=(
+                    dataset.transformation.to(self.device)
+                    if dataset.transformation is not None
+                    else None
+                ),
             )
             final_results["linear_model_epoch"] = num_epochs - 1
             train_results.append(final_results)
@@ -252,9 +260,9 @@ class TaskLinearModel(nn.Module):
         """
         self.train()
         epochs_losses = []
-        
+
         for _, data_batch in enumerate(dataloader):
-            
+
             inputs, targets, task_idx_batch = data_batch
             gamma = self.gamma_params[task_idx_batch].unsqueeze(-1)
             c_s = self.c_params[task_idx_batch].unsqueeze(1)
@@ -270,8 +278,7 @@ class TaskLinearModel(nn.Module):
                 c_ind_params=c_s,
                 gamma=gamma,
             )
-            
-            
+
             loss = loss.mean()
             epochs_losses.append(loss.item())
             loss.backward()
@@ -351,4 +358,3 @@ class TaskLinearModel(nn.Module):
             "mcc_transforms_mean": np.mean(mccs_transforms),
         }
         return results_dict
-

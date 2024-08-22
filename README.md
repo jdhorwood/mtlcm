@@ -29,3 +29,32 @@ This package provides the implementations for the results in the paper:
     ```
     poetry remove dgl; pip install  dgl -f https://data.dgl.ai/wheels/torch-2.3/cu121/repo.html
     ```
+
+## Running the experiments
+
+The experiments are run via the file `mtlcm/run.py` and configured through yaml files. Below are sample commands for each experiment. Replace the configuration files/entries to try different hyper-parameters.
+
+### Linear synthetic data
+
+```python
+python mtlcm/run.py linear_synthetic mtlcm/experiments/linear_identifiability/configs/config.yaml
+```
+
+### Non-linear synthetic data
+
+```python
+python mtlcm/run.py multitask_synthetic mtlcm/experiments/synthetic_multitask/configs/exp_config.yaml
+```
+
+### QM9 Data
+
+```python
+python mtlcm/run.py qm9 mtlcm/experiments/qm9/configs/test_config.yaml
+```
+
+### Superconductivity data
+
+```python
+python mtlcm/run.py superconduct mtlcm/experiments/superconduct/configs/test_config.yaml
+```
+

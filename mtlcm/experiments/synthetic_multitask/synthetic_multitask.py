@@ -72,9 +72,17 @@ class SyntheticMultiTaskExperiment:
 
         # Generate the data
         dataset = NonLinearDataset(
-            decoder=self.true_decoder, observation_dim=self.observation_dim, latent_dim=self.latent_dim,
-            sigma_s=0.1, num_causal=self.num_causal, num_tasks=self.num_tasks, device=self.device,
-            sample_gammas=True, num_support_points=self.num_samples_per_task, standardize_features=self.standardize_features)
+            decoder=self.true_decoder,
+            observation_dim=self.observation_dim,
+            latent_dim=self.latent_dim,
+            sigma_s=0.1,
+            num_causal=self.num_causal,
+            num_tasks=self.num_tasks,
+            device=self.device,
+            sample_gammas=True,
+            num_support_points=self.num_samples_per_task,
+            standardize_features=self.standardize_features,
+        )
 
         # Save artifacts
         if save_data:
@@ -104,15 +112,22 @@ class SyntheticMultiTaskExperiment:
         )
         with fsspec.open(f"{self.output_path}/data/observations.pt", "wb") as f:
             torch.save(observations, f)
-            
+
         # Train the identifiable linear model
         logger.info("Training the identifiable linear model")
-        linear_dataset = LinearDataset.from_data(o_supportx=observations, o_supporty=multi_dataset.y_data, num_tasks=self.num_tasks,
-                                                 num_support_points=self.num_samples_per_task, device=self.device, causal_index=multi_dataset.causal_index,
-                                                 gamma_coeffs=multi_dataset.gamma_coeffs, latents=multi_dataset.x_data)
+        linear_dataset = LinearDataset.from_data(
+            o_supportx=observations,
+            o_supporty=multi_dataset.y_data,
+            num_tasks=self.num_tasks,
+            num_support_points=self.num_samples_per_task,
+            device=self.device,
+            causal_index=multi_dataset.causal_index,
+            gamma_coeffs=multi_dataset.gamma_coeffs,
+            latents=multi_dataset.x_data,
+        )
 
         results = self._train_linear_model(dataset=linear_dataset)
-        
+
         # These are the results from the multitask (weakly identifiable) model
         results["weak_mcc_after_training"] = weak_mcc
 
@@ -131,21 +146,18 @@ class SyntheticMultiTaskExperiment:
         results_df = linear_model.train_A(
             dataset=dataset,
             num_epochs=self.num_linear_epochs,
-            debug=True,
-            use_ground_truth=False,
             batch_size=self.batch_size,
             eval_interval=200,
             use_scheduler=True,
         )
-        
-        results_df['seed'] = self.seed
-        results_df['num_causal'] = self.num_causal
-        results_df['num_tasks'] = self.num_tasks
-        results_df['num_samples_per_task'] = self.num_samples_per_task
-        results_df['latent_dim'] = self.latent_dim
-        results_df['sigma_obs'] = self.sigma_obs
-        results_df['observed_dim'] = self.observation_dim
 
+        results_df["seed"] = self.seed
+        results_df["num_causal"] = self.num_causal
+        results_df["num_tasks"] = self.num_tasks
+        results_df["num_samples_per_task"] = self.num_samples_per_task
+        results_df["latent_dim"] = self.latent_dim
+        results_df["sigma_obs"] = self.sigma_obs
+        results_df["observed_dim"] = self.observation_dim
 
         return results_df
 
@@ -170,13 +182,13 @@ class SyntheticMultiTaskExperiment:
         )
 
         strong_mcc, weak_mcc = self.multitask_model.eval_mcc(
-            observations=dataset.obs_data, targets=dataset.x_data.detach().cpu().numpy(), cca_dim=self.latent_dim)
-        
+            observations=dataset.obs_data,
+            targets=dataset.x_data.detach().cpu().numpy(),
+            cca_dim=self.latent_dim,
+        )
+
         return strong_mcc, weak_mcc
 
     def save_results(self, results):
         save_path = f"{self.output_path}/results.csv"
         results.to_csv(save_path)
-
-
-

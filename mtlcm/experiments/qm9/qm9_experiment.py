@@ -18,25 +18,26 @@ from mtlcm.data.qm9.graph_dataset import GraphDataset
 
 DATA_PATH = "./data/qm9"
 
+
 class QM9Experiment:
     def __init__(
-            self,
-            output_path,
-            latent_dim,
-            hidden_dim,
-            device=None,
-            seed=0,
-            sigma_obs=1e-4,
-            sigma_s=0.1,
-            num_linear_epochs=20,
-            num_multitask_epochs=200,
-            batch_size=256,
-            exp_name=None,
-            standardize_features=True,
-            lr=1e-3,
-            use_gnn=True,
-            load_path=None,
-            subset_size=None,
+        self,
+        output_path,
+        latent_dim,
+        hidden_dim,
+        device=None,
+        seed=0,
+        sigma_obs=1e-4,
+        sigma_s=0.1,
+        num_linear_epochs=20,
+        num_multitask_epochs=200,
+        batch_size=256,
+        exp_name=None,
+        standardize_features=True,
+        lr=1e-3,
+        use_gnn=True,
+        load_path=None,
+        subset_size=None,
     ):
 
         self.load_path = load_path
@@ -71,7 +72,9 @@ class QM9Experiment:
 
         # Load the data
         if self.use_gnn:
-            dataset = GraphDataset(subset_size=self.subset_size, standardize=True, load_path=self.load_path)
+            dataset = GraphDataset(
+                subset_size=self.subset_size, standardize=True, load_path=self.load_path
+            )
             self.y = dataset.y
             self.observation_dim = dataset.num_features
             self.num_tasks = dataset.num_tasks
@@ -108,31 +111,52 @@ class QM9Experiment:
 
         # Train the identifiable linear model
         logger.info("Training the identifiable linear model")
-        observations, targets = self.multitask_model.get_latents(multi_dataset, dataloader_cls=(GraphDataLoader if self.use_gnn else None))
+        observations, targets = self.multitask_model.get_latents(
+            multi_dataset, dataloader_cls=(GraphDataLoader if self.use_gnn else None)
+        )
         observations = standardize_data(observations, device=self.device)[0]
-        with fsspec.open(f"{self.output_path}/data/multitask_model_latents_latent_dim:{self.latent_dim}.pt", "wb") as f:
+        with fsspec.open(
+            f"{self.output_path}/data/multitask_model_latents_latent_dim:{self.latent_dim}.pt",
+            "wb",
+        ) as f:
             torch.save(observations, f)
-        with fsspec.open(f"{self.output_path}/data/multitask_model_targets_latent_dim:{self.latent_dim}.pt", "wb") as f:
+        with fsspec.open(
+            f"{self.output_path}/data/multitask_model_targets_latent_dim:{self.latent_dim}.pt",
+            "wb",
+        ) as f:
             torch.save(targets, f)
 
-        task_id = torch.tensor([i for i in range(self.num_tasks) for _ in range(observations.shape[0])]).long()
+        task_id = torch.tensor(
+            [i for i in range(self.num_tasks) for _ in range(observations.shape[0])]
+        ).long()
         x_task = torch.cat([observations for _ in range(self.num_tasks)], dim=0)
-        y_task = torch.cat([self.y[:, i] for i in range(self.num_tasks)], dim=0).unsqueeze(-1)
+        y_task = torch.cat(
+            [self.y[:, i] for i in range(self.num_tasks)], dim=0
+        ).unsqueeze(-1)
         lin_model_dataset = TensorDataset(x_task, y_task, task_id)
 
         results = self._train_linear_model(dataset=lin_model_dataset)
         lin_latents = self.linear_model.get_latents(observations, to_numpy=False)
-        with fsspec.open(f"{self.output_path}/data/linear_model_latents_latent_dim:{self.latent_dim}.pt", "wb") as f:
+        with fsspec.open(
+            f"{self.output_path}/data/linear_model_latents_latent_dim:{self.latent_dim}.pt",
+            "wb",
+        ) as f:
             torch.save(lin_latents, f)
 
         with fsspec.open(f"{self.output_path}/data/c_params.pt", "wb") as f:
             torch.save(self.linear_model.c_params, f)
 
         # Save parameters of the models to disk
-        with fsspec.open(f"{self.output_path}/model_params/multitask_model_params_latent_dim:{self.latent_dim}.pt", "wb") as f:
+        with fsspec.open(
+            f"{self.output_path}/model_params/multitask_model_params_latent_dim:{self.latent_dim}.pt",
+            "wb",
+        ) as f:
             torch.save(self.multitask_model.state_dict(), f)
 
-        with fsspec.open(f"{self.output_path}/model_params/linear_model_params_latent_dim:{self.latent_dim}.pt", "wb") as f:
+        with fsspec.open(
+            f"{self.output_path}/model_params/linear_model_params_latent_dim:{self.latent_dim}.pt",
+            "wb",
+        ) as f:
             torch.save(self.linear_model.state_dict(), f)
 
         # Save results
@@ -153,19 +177,17 @@ class QM9Experiment:
         results_df = self.linear_model.train_A(
             dataset=dataset,
             num_epochs=self.num_linear_epochs,
-            debug=True,
-            use_ground_truth=False,
             batch_size=self.batch_size,
             eval_interval=200,
             use_scheduler=True,
             run_eval=False,
         )
 
-        results_df['seed'] = self.seed
-        results_df['num_tasks'] = self.num_tasks
-        results_df['latent_dim'] = self.latent_dim
-        results_df['sigma_obs'] = self.sigma_obs
-        results_df['observed_dim'] = self.observation_dim
+        results_df["seed"] = self.seed
+        results_df["num_tasks"] = self.num_tasks
+        results_df["latent_dim"] = self.latent_dim
+        results_df["sigma_obs"] = self.sigma_obs
+        results_df["observed_dim"] = self.observation_dim
 
         return results_df
 
@@ -185,11 +207,8 @@ class QM9Experiment:
             dataset=dataset,
             num_epochs=self.num_multitask_epochs,
             batch_size=self.batch_size,
-            cca_dim=self.latent_dim,
             use_scheduler=False,
-            track_mcc=False,
             lr=self.lr,
-            run_eval=False,
             use_gnn=self.use_gnn,
         )
 
@@ -208,20 +227,30 @@ class QM9Experiment:
             with fsspec.open(config_path, "r") as f:
                 config = yaml.safe_load(f)
 
-            latent_dim = config['latent_dim']
-            method = config.get('method', 'MTLCM')
+            latent_dim = config["latent_dim"]
+            method = config.get("method", "MTLCM")
 
-            lin_latents = glob.glob(f"{output_path}/**/linear_model_latents*.pt", recursive=True)
-            multi_latents = glob.glob(f"{output_path}/**/multitask_model_latents*.pt", recursive=True)
-            lin_latents = [torch.load(l, map_location=torch.device('cpu')) for l in lin_latents]
-            multi_latents = [torch.load(l, map_location=torch.device('cpu')) for l in multi_latents]
+            lin_latents = glob.glob(
+                f"{output_path}/**/linear_model_latents*.pt", recursive=True
+            )
+            multi_latents = glob.glob(
+                f"{output_path}/**/multitask_model_latents*.pt", recursive=True
+            )
+            lin_latents = [
+                torch.load(l, map_location=torch.device("cpu")) for l in lin_latents
+            ]
+            multi_latents = [
+                torch.load(l, map_location=torch.device("cpu")) for l in multi_latents
+            ]
 
             # Compute the weak MCC between all pairs of multitask model latents
             multi_weak_mcc = []
             multi_strong_mcc = []
             lin_strong_mcc = []
             for h1, h2 in itertools.combinations(range(len(multi_latents)), 2):
-                weak_mcc, strong_mcc = cal_weak_strong_mcc(multi_latents[h1], multi_latents[h2])
+                weak_mcc, strong_mcc = cal_weak_strong_mcc(
+                    multi_latents[h1], multi_latents[h2]
+                )
                 multi_weak_mcc.append(weak_mcc)
                 multi_strong_mcc.append(strong_mcc)
 
@@ -230,13 +259,21 @@ class QM9Experiment:
                 mcc, _ = cal_mcc(lin_latents[h1], lin_latents[h2])
                 lin_strong_mcc.append(mcc)
 
-            result_dfs.append(pd.DataFrame({
-                "MTRN (weak)": multi_weak_mcc,
-                "multi_strong_mcc": multi_strong_mcc,
-                "MTLCM": lin_strong_mcc if len(lin_strong_mcc) > 0 else [np.nan] * len(multi_weak_mcc),
-                "latent_dim": latent_dim,
-                "method": method,
-            }))
+            result_dfs.append(
+                pd.DataFrame(
+                    {
+                        "MTRN (weak)": multi_weak_mcc,
+                        "multi_strong_mcc": multi_strong_mcc,
+                        "MTLCM": (
+                            lin_strong_mcc
+                            if len(lin_strong_mcc) > 0
+                            else [np.nan] * len(multi_weak_mcc)
+                        ),
+                        "latent_dim": latent_dim,
+                        "method": method,
+                    }
+                )
+            )
 
         results = pd.concat(result_dfs, ignore_index=True)
         return results
@@ -275,8 +312,16 @@ class QM9Experiment:
         results_columns = ["MTRN (weak)", "MTLCM"]
 
         for i, col in enumerate(results_columns):
-            sns.pointplot(x='latent_dim', y=col, data=results, capsize=0.1, join=False, errwidth=3.0, color=palette[i],
-                          label=col)
+            sns.pointplot(
+                x="latent_dim",
+                y=col,
+                data=results,
+                capsize=0.1,
+                join=False,
+                errwidth=3.0,
+                color=palette[i],
+                label=col,
+            )
 
         # Get figure
         fig = plt.gcf()
@@ -295,8 +340,3 @@ class QM9Experiment:
         fig.savefig(f"{save_path}/{fig_name}.pdf")
         fig.savefig(f"{save_path}/{fig_name}.png")
         fig.savefig(f"{save_path}/{fig_name}.svg")
-
-
-
-
-

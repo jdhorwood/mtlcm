@@ -16,6 +16,7 @@ numpy = "1.24.3"
 seaborn = "^0.13.2"
 torch = "~2.3.0"
 pydantic = "^2.8.2"
+black = "^24.8.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5"

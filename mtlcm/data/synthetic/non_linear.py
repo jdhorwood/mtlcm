@@ -4,13 +4,24 @@ from mtlcm.utils.data.causal_synthetic import gen_data
 
 
 class NonLinearDataset(Dataset):
-    def __init__(self, decoder, observation_dim, latent_dim, sigma_s, num_causal, num_tasks, device,
-                 sample_gammas=True, num_support_points=50, standardize_features=False):
+    def __init__(
+        self,
+        decoder,
+        observation_dim,
+        latent_dim,
+        sigma_s,
+        num_causal,
+        num_tasks,
+        device,
+        sample_gammas=True,
+        num_support_points=50,
+        standardize_features=False,
+    ):
 
         self.decoder = decoder
         self.standardize_features = standardize_features
         self.num_tasks = num_tasks
-        self.num_causal= num_causal
+        self.num_causal = num_causal
         self.num_points_per_task = num_support_points
         self.observation_dim = observation_dim
         self.latent_dim = latent_dim
@@ -40,7 +51,13 @@ class NonLinearDataset(Dataset):
 
         self.causal_index = torch.as_tensor(self.causal_index)
 
-        assert len(self.gamma_coeffs) == len(self.causal_index) == len(x_support) == self.causal_index.shape[0] == self.num_tasks
+        assert (
+            len(self.gamma_coeffs)
+            == len(self.causal_index)
+            == len(x_support)
+            == self.causal_index.shape[0]
+            == self.num_tasks
+        )
 
         super().__init__()
 

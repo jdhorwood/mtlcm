@@ -1,13 +1,28 @@
 from torch.utils.data import Dataset
 from mtlcm.utils.data.lin_transform import generate_synthetic_transform_data
 
+
 class LinearDataset(Dataset):
-    def __init__(self, observation_dim, num_tasks, device, num_causal=None, sigma_obs=0.01, sigma_s=0.1, o_supportx=None, o_supporty=None,
-                 sample_gammas=True, num_support_points=50, identity=False, orthogonal=False, standardize_features=False):
+    def __init__(
+        self,
+        observation_dim,
+        num_tasks,
+        device,
+        num_causal=None,
+        sigma_obs=0.01,
+        sigma_s=0.1,
+        o_supportx=None,
+        o_supporty=None,
+        sample_gammas=True,
+        num_support_points=50,
+        identity=False,
+        orthogonal=False,
+        standardize_features=False,
+    ):
 
         self.standardize_features = standardize_features
         self.num_tasks = num_tasks
-        self.num_causal= num_causal
+        self.num_causal = num_causal
         self.num_points_per_task = num_support_points
         self.observation_dim = observation_dim
 
@@ -43,25 +58,47 @@ class LinearDataset(Dataset):
 
         self.x_data = self.o_supportx.view(-1, observation_dim)
         self.y_data = self.o_supporty.flatten().unsqueeze(-1)
-        self.latents_flat = self.latents.view(-1, observation_dim) if self.latents is not None else None
+        self.latents_flat = (
+            self.latents.view(-1, observation_dim) if self.latents is not None else None
+        )
 
         super().__init__()
 
     @classmethod
-    def from_data(cls, o_supportx, o_supporty, num_tasks, num_support_points, device, causal_index=None, gamma_coeffs=None, latents=None):
+    def from_data(
+        cls,
+        o_supportx,
+        o_supporty,
+        num_tasks,
+        num_support_points,
+        device,
+        causal_index=None,
+        gamma_coeffs=None,
+        latents=None,
+    ):
         if o_supportx.ndim == 2 and o_supporty.ndim == 2:
             o_supportx = o_supportx.view(num_tasks, num_support_points, -1)
             o_supporty = o_supporty.view(num_tasks, num_support_points, -1)
 
         observation_dim = o_supportx.shape[-1]
 
-        obj = cls(observation_dim=observation_dim, num_tasks=num_tasks, device=device, o_supportx=o_supportx,
-                   o_supporty=o_supporty, num_support_points=num_support_points)
+        obj = cls(
+            observation_dim=observation_dim,
+            num_tasks=num_tasks,
+            device=device,
+            o_supportx=o_supportx,
+            o_supporty=o_supporty,
+            num_support_points=num_support_points,
+        )
 
         obj.causal_index = causal_index
         obj.gamma_coeffs = gamma_coeffs
         obj.latents_flat = latents
-        obj.latents = latents.view(num_tasks, num_support_points, observation_dim) if latents is not None else None
+        obj.latents = (
+            latents.view(num_tasks, num_support_points, observation_dim)
+            if latents is not None
+            else None
+        )
 
         return obj
 

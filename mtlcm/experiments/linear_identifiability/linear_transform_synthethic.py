@@ -7,11 +7,26 @@ from mtlcm.data.synthetic.linear import LinearDataset
 from mtlcm.utils.data.generics import seed_everything
 from mtlcm.models.linear_task_model import TaskLinearModel
 
+
 class LinearTransformExperiment:
-    def __init__(self, output_path, latent_dim, num_seeds=1, matrix_types=None, sigma_obs=0.01, sigma_s=0.1,
-                 num_causal=2, num_tasks=100, num_points_per_task=50, num_epochs=6000,
-                 batch_size=20, device=None, n_jobs=1, standardize_features=True,
-                 seed=None):
+    def __init__(
+        self,
+        output_path,
+        latent_dim,
+        num_seeds=1,
+        matrix_types=None,
+        sigma_obs=0.01,
+        sigma_s=0.1,
+        num_causal=2,
+        num_tasks=100,
+        num_points_per_task=50,
+        num_epochs=6000,
+        batch_size=20,
+        device=None,
+        n_jobs=1,
+        standardize_features=True,
+        seed=None,
+    ):
 
         self.standardize_features = standardize_features
         self.output_path = output_path
@@ -48,13 +63,23 @@ class LinearTransformExperiment:
             pd.DataFrame containing the results of the experiment.
 
         """
-        kwargs = [{'seed': x[0], 'matrix_type': x[1]} for x in list(product(self.seeds, self.matrix_types))]
-        results_list = dm.utils.parallelized(fn=self._run_identifiability_experiment, inputs_list=kwargs,
-                                             n_jobs=self.n_jobs, arg_type="kwargs", progress=True,
-                                             scheduler="threads")
+        kwargs = [
+            {"seed": x[0], "matrix_type": x[1]}
+            for x in list(product(self.seeds, self.matrix_types))
+        ]
+        results_list = dm.utils.parallelized(
+            fn=self._run_identifiability_experiment,
+            inputs_list=kwargs,
+            n_jobs=self.n_jobs,
+            arg_type="kwargs",
+            progress=True,
+            scheduler="threads",
+        )
 
-        results = pd.concat(results_list, axis=0) 
-        self._save_results(results, save_path=os.path.join(self.output_path, "results.csv"))
+        results = pd.concat(results_list, axis=0)
+        self._save_results(
+            results, save_path=os.path.join(self.output_path, "results.csv")
+        )
 
     def setup(self, seed, matrix_type, save_data=True):
         """
@@ -138,7 +163,7 @@ class LinearTransformExperiment:
         r["seed"] = seed
         r["latent_dim"] = self.latent_dim
         r["num_causal"] = self.num_causal
-        
+
         return r
 
     def _train_model(
@@ -173,5 +198,3 @@ class LinearTransformExperiment:
         )
 
         return run_results
-
-
