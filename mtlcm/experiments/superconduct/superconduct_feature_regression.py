@@ -1,19 +1,12 @@
 import os
-import glob
 import fsspec
 import torch
 import numpy as np
-import itertools
-
-from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from loguru import logger
-import pandas as pd
 from torch.utils.data import TensorDataset
-import seaborn as sns
 from mtlcm.models import MultiTaskModel, TaskLinearModel
 from mtlcm.utils.data.generics import seed_everything
-from mtlcm.utils.data.lin_transform import cal_weak_strong_mcc, cal_mcc
 
 DATA_PATH = "data/superconduct/"
 
@@ -187,41 +180,3 @@ class SuperconductFeatureRegressionExperiment:
     def save_results(self, results):
         save_path = f"{self.output_path}/results.csv"
         results.to_csv(save_path)
-
-    @staticmethod
-    def collect_results(output_path):
-
-        # Load the data across all seeds
-        lin_latents = glob.glob(
-            f"{output_path}/**/linear_model_latents.pt", recursive=True
-        )
-        multi_latents = glob.glob(
-            f"{output_path}/**/multitask_model_latents.pt", recursive=True
-        )
-        lin_latents = [torch.load(l) for l in lin_latents]
-        multi_latents = [torch.load(l) for l in multi_latents]
-
-        # Compute the weak MCC between all pairs of multitask model latents
-        multi_weak_mcc = []
-        multi_strong_mcc = []
-        for h1, h2 in itertools.combinations(range(len(multi_latents)), 2):
-            weak_mcc, strong_mcc = cal_weak_strong_mcc(
-                multi_latents[h1], multi_latents[h2]
-            )
-            multi_weak_mcc.append(weak_mcc)
-            multi_strong_mcc.append(strong_mcc)
-
-        # Compute the strong MCC between all pairs of linear model latents
-        lin_strong_mcc = []
-        for h1, h2 in itertools.combinations(range(len(lin_latents)), 2):
-            mcc, _ = cal_mcc(lin_latents[h1], lin_latents[h2])
-            lin_strong_mcc.append(mcc)
-
-        results = pd.DataFrame(
-            {
-                "multi_weak_mcc": multi_weak_mcc,
-                "multi_strong_mcc": multi_strong_mcc,
-                "lin_strong_mcc": lin_strong_mcc,
-            }
-        )
-        return results

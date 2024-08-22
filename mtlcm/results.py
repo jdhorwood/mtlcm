@@ -10,6 +10,7 @@ from typer import Typer
 
 app = Typer()
 
+
 @app.command()
 def collect_results(output_path: str):
 
@@ -27,9 +28,7 @@ def collect_results(output_path: str):
     multi_latents = glob.glob(
         f"{output_path}/**/multitask_model_latents*.pt", recursive=True
     )
-    lin_latents = [
-        torch.load(l, map_location=torch.device("cpu")) for l in lin_latents
-    ]
+    lin_latents = [torch.load(l, map_location=torch.device("cpu")) for l in lin_latents]
     multi_latents = [
         torch.load(l, map_location=torch.device("cpu")) for l in multi_latents
     ]
@@ -38,9 +37,7 @@ def collect_results(output_path: str):
     multi_weak_mcc = []
     lin_strong_mcc = []
     for h1, h2 in itertools.combinations(range(len(multi_latents)), 2):
-        weak_mcc, _ = cal_weak_strong_mcc(
-            multi_latents[h1], multi_latents[h2]
-        )
+        weak_mcc, _ = cal_weak_strong_mcc(multi_latents[h1], multi_latents[h2])
         multi_weak_mcc.append(weak_mcc)
 
     # Compute the strong MCC between all pairs of linear model latents
@@ -49,19 +46,20 @@ def collect_results(output_path: str):
         lin_strong_mcc.append(mcc)
 
     results = pd.DataFrame(
-            {
-                "MTRN (weak)": multi_weak_mcc,
-                "MTLCM": (
-                    lin_strong_mcc
-                    if len(lin_strong_mcc) > 0
-                    else [np.nan] * len(multi_weak_mcc)
-                ),
-                "latent_dim": latent_dim,
-                "method": method,
-            }
-        )
-    
+        {
+            "MTRN (weak)": multi_weak_mcc,
+            "MTLCM": (
+                lin_strong_mcc
+                if len(lin_strong_mcc) > 0
+                else [np.nan] * len(multi_weak_mcc)
+            ),
+            "latent_dim": latent_dim,
+            "method": method,
+        }
+    )
+
     results.to_csv(f"{output_path}/results.csv", index=False)
+
 
 if __name__ == "__main__":
     app()

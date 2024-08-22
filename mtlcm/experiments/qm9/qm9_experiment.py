@@ -2,18 +2,14 @@ import os
 import glob
 import fsspec
 import torch
-import yaml
 import numpy as np
-import itertools
 from dgl.dataloading.dataloader import GraphDataLoader
-from matplotlib import pyplot as plt
 from loguru import logger
 import pandas as pd
 from torch.utils.data import TensorDataset
 import seaborn as sns
 from mtlcm.models import MultiTaskModel, TaskLinearModel
 from mtlcm.utils.data.generics import seed_everything, standardize_data
-from mtlcm.utils.data.lin_transform import cal_weak_strong_mcc, cal_mcc
 from mtlcm.data.qm9.graph_dataset import GraphDataset
 
 DATA_PATH = "./data/qm9"
@@ -215,4 +211,3 @@ class QM9Experiment:
     def save_results(self, results):
         save_path = f"{self.output_path}/results.csv"
         results.to_csv(save_path)
-    
