@@ -69,4 +69,17 @@ Results for synthetic data experiments will be immediately available in the exp_
 python mtlcm/results.py "exp_outputs/qm9/full_config_latent7"
 ```
 
+## Citation
 
+If you find our paper and/or code useful for your research, please consider citing our paper:
+
+```
+@article{chen2024leveraging,
+title={Leveraging Task Structures for Improved Identifiability in Neural Network Representations},
+author={Wenlin Chen and Julien Horwood and Juyeon Heo and Jos{\'e} Miguel Hern{\'a}ndez-Lobato},
+journal={Transactions on Machine Learning Research},
+issn={2835-8856},
+year={2024},
+url={https://openreview.net/forum?id=WLcPrq6pu0}
+}
+```
